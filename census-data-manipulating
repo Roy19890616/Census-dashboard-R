@@ -1,0 +1,426 @@
+#load all the packages
+library(openxlsx)
+library(dplyr)
+library(tidyr)
+library(haven)
+library(stringr)
+
+#load census data from desktop
+
+roster_pp_v7 <- read_dta("~/OneDrive - alum.ccu.edu.tw/國合會志工/EPPSO/census/raw data/Pacific_Standard_Census_Question_7_STATA_All/roster_pp.dta")
+roster_pp_v8 <- read_dta("~/OneDrive - alum.ccu.edu.tw/國合會志工/EPPSO/census/raw data/Pacific_Standard_Census_Question_8_STATA_All/roster_pp.dta")
+Pacific_Standard_Census_Question_v7 <- read_dta("~/OneDrive - alum.ccu.edu.tw/國合會志工/EPPSO/census/raw data/Pacific_Standard_Census_Question_7_STATA_All/Pacific_Standard_Census_Question.dta")
+Pacific_Standard_Census_Question_v8 <- read_dta("~/OneDrive - alum.ccu.edu.tw/國合會志工/EPPSO/census/raw data/Pacific_Standard_Census_Question_8_STATA_All/Pacific_Standard_Census_Question.dta")
+
+#combine the ver7 and ver8 together
+roster_pp <- rbind(roster_pp_v7, roster_pp_v8)
+Pacific_Standard_Census_Question <- rbind(Pacific_Standard_Census_Question_v7, Pacific_Standard_Census_Question_v8)
+
+#join roster & census question
+all_data <- left_join(roster_pp, Pacific_Standard_Census_Question, by = "interview__id", suffix = c("_roster", "_question"))
+
+#create a workbook:census
+census <- createWorkbook()
+
+#create individual data
+individual_data <- all_data %>%
+  select(interview__key_roster:g8a_last_child_mmyyyy, Atoll_island, EA_number) %>%
+  mutate(disability = case_when(
+    (d1_seeing %in% c(1, 2) & d2_hearing %in% c(1, 2) & d3_mobility %in% c(1, 2) &
+    d4_memory %in% c(1, 2) & d5_sefcare %in% c(1, 2) & d6_communication %in% c(1, 2)) ~ "Without disability",
+    (d1_seeing %in% c(3, 4) | d2_hearing %in% c(3, 4) | d3_mobility %in% c(3, 4) |
+    d4_memory %in% c(3, 4) | d5_sefcare %in% c(3, 4) | d6_communication %in% c(3, 4)) ~ "With disability"),
+    disability_num = 
+      case_when(d1_seeing %in% c(3, 4) ~ 1, TRUE ~ 0) + case_when(d2_hearing %in% c(3, 4) ~ 1, TRUE ~ 0) +
+      case_when(d3_mobility %in% c(3, 4) ~ 1, TRUE ~ 0) + case_when(d4_memory %in% c(3, 4) ~ 1, TRUE ~ 0) +
+      case_when(d5_sefcare %in% c(3, 4) ~ 1, TRUE ~ 0) + case_when(d6_communication %in% c(3, 4) ~ 1, TRUE ~ 0) 
+    ) %>%
+  mutate(
+    sex = as_factor(r2_sex), 
+    relationship = as_factor(r4_relat), 
+    ethnic = as_factor(c1_ethnic), 
+    citizen = as_factor(c3_citizen), 
+    marital_status = as_factor(c4_marital_status), 
+    religion = as_factor(c5_religion_affiliation), 
+    d1_seeing = as_factor(d1_seeing), 
+    d2_hearing = as_factor(d2_hearing), 
+    d3_mobility = as_factor(d3_mobility), 
+    d4_memory = as_factor(d4_memory), 
+    d5_sefcare = as_factor(d5_sefcare), 
+    d6_communication = as_factor(d6_communication), 
+    internet_access = as_factor(h1_internet_access), 
+    internet_location = as_factor(h2_location), 
+    mobile_phone = as_factor(h3_mobile_phone),
+    education = as_factor(grade_completed), 
+    read = as_factor(ce5_read), 
+    writing = as_factor(e6_writing), 
+    speak_own_language = as_factor(e7_speak_own_language), 
+    speak_other = as_factor(e8_speak_other), 
+    main_activity = as_factor(lf1), 
+    working_Atoll = as_factor(lf7c), 
+    employment_stasus = as_factor(lf8), 
+    work_in = as_factor(lf8a), 
+    social_security_and_insurance = as_factor(lf8b), 
+    woking_hours = as_factor(lf9), 
+    g1_ever_given_births = as_factor(g1_ever_given_births), 
+    g2_age_1st_birth = as_factor(g2_age_1st_birth), 
+    Atoll = as_factor(Atoll_island), 
+    EA = as_factor(EA_number) 
+  ) %>%
+  mutate(age_group = case_when(
+    r3_age >= 0 & r3_age <= 4 ~ "00-04",
+    r3_age >= 5 & r3_age <= 9 ~ "05-09",
+    r3_age >= 10 & r3_age <= 14 ~ "10-14",
+    r3_age >= 15 & r3_age <= 19 ~ "15-19",
+    r3_age >= 20 & r3_age <= 24 ~ "20-24",
+    r3_age >= 25 & r3_age <= 29 ~ "25-29",
+    r3_age >= 30 & r3_age <= 34 ~ "30-34",
+    r3_age >= 35 & r3_age <= 39 ~ "35-39",
+    r3_age >= 40 & r3_age <= 44 ~ "40-44",
+    r3_age >= 45 & r3_age <= 49 ~ "45-49",
+    r3_age >= 50 & r3_age <= 54 ~ "50-54",
+    r3_age >= 55 & r3_age <= 59 ~ "55-59",
+    r3_age >= 60 & r3_age <= 64 ~ "60-64",
+    r3_age >= 65 & r3_age <= 69 ~ "65-69",
+    r3_age >= 70 & r3_age <= 74 ~ "70-74",
+    r3_age >= 75 & r3_age <= 79 ~ "75-79",
+    r3_age >= 80 & r3_age <= 84 ~ "80-84",
+    r3_age >= 85 & r3_age <= 89 ~ "85-89",
+    r3_age >= 90 ~ "90+"
+  )) %>%
+  mutate(degree = case_when(
+    education == "Kindergarten" ~ "Pre-school",
+    education == "Pre-school" ~ "Pre-school",
+    education == "1st Grade" ~ "Elementaryschool",
+    education == "2nd Grade" ~ "Elementaryschool",
+    education == "3rd Grade" ~ "Elementaryschool",
+    education == "4th Grade" ~ "Elementaryschool",
+    education == "5th Grade" ~ "Elementaryschool",
+    education == "6th Grade" ~ "Elementaryschool",
+    education == "7th Grade" ~ "Middleschool",
+    education == "8th Grade" ~ "Middleschool",
+    education == "9th Grade" ~ "Highschool",
+    education == "10th Grade" ~ "Highschool",
+    education == "11th Grade" ~ "Highschool",
+    education == "12th Grade, GED" ~ "Highschool",
+    education == "Associate degree" ~ "Somecollege",
+    education == "Associate College- Occupational Program" ~ "Somecollege",
+    education == "Associate College - Academic Program" ~ "Somecollege",
+    education == "Bachelor's degree" ~ "Bachelor’s",
+    education == "Other professional degree" ~ "Post-grad",
+    education == "Master's Degree" ~ "Post-grad",
+    education == "PhD" ~ "Post-grad")) 
+
+#create a new sheet:individual_data in census workbook, 
+#and write individual_data table to individual_data sheet
+addWorksheet(census, "individual_data") 
+writeData(census, sheet = "individual_data", x = individual_data)
+
+#create activities_to_produce_food sheet
+activities_to_produce_food <- roster_pp %>%
+  select(interview__id, lf10__1:lf10__4) %>%
+  gather(lf10__1:lf10__4, key = "activities_to_produce_food", value = "activities_to_produce_food_value") %>%
+  filter(activities_to_produce_food_value == 1) %>%
+  mutate(activities_to_produce_food = case_when(
+    activities_to_produce_food == "lf10__1" ~ "Farming or growing food in a plot or kitchen garden",
+    activities_to_produce_food == "lf10__2" ~ "Raising or tending farm animals (examples)",
+    activities_to_produce_food == "lf10__3" ~ "Fishing, fish farming, collecting shellfish",
+    activities_to_produce_food == "lf10__4" ~ "Hunting or gathering wild foods (examples)"
+  ))
+
+#create a new sheet:activities_to_produce_food in census workbook, 
+#and write activities_to_produce_food table to activities_to_produce_food sheet
+addWorksheet(census, "activities_to_produce_food")
+writeData(census, sheet = "activities_to_produce_food", x = activities_to_produce_food)
+
+#create household data
+household_data <- Pacific_Standard_Census_Question %>%
+  mutate(toilet = as_factor(i8_toilet_facility),
+         share_toilet = as_factor(i8b_share_toilet),
+         recieve_money = as_factor(i16a_money),
+         recieve_money_freq = as_factor(i16b_money_freq),
+         recieve_good = as_factor(i16c_goods),
+         recieve_good_freq = as_factor(i16d_how_often),
+         housing_tenure = as_factor(i2_type),
+         housing_type = as_factor(i1_building),
+         floor_area = as_factor(floor_area),
+         leaving_member = as_factor(i20a_moved_hh_last_3y),
+         worried = as_factor(worried),
+         healthy = as_factor(healthy),
+         fewfood = as_factor(fewfood),
+         skipped = as_factor(skipped),
+         ateless = as_factor(ateless),
+         runout = as_factor(runout),
+         hungry = as_factor(hungry),
+         whlday = as_factor(whlday)
+         ) %>%
+  select(interview__id, toilet, share_toilet, recieve_money, recieve_money_freq,
+         recieve_good, recieve_good_freq , i16c_total_income,
+         housing_type, housing_tenure, floor_area, leaving_member, worried:whlday)
+
+#create a new sheet:household_data in census workbook, 
+#and write household_data table to household_data sheet
+addWorksheet(census, "household_data") 
+writeData(census, sheet = "household_data", x = household_data)
+
+#create drink water sheet
+i6_drink_water <- Pacific_Standard_Census_Question %>%
+  select(interview__id,i6_drink_water__1:i6_drink_water__99) %>%
+  gather(i6_drink_water__1:i6_drink_water__99, key = "drink_water", value = "drink_water_value") %>%
+  filter(drink_water_value == 1)%>%
+  mutate(drink_water = case_when(
+    drink_water == "i6_drink_water__1" ~ "Public Piped Water inside dwelling",
+    drink_water == "i6_drink_water__2" ~ "Public Piped Water outside dwelling",
+    drink_water == "i6_drink_water__3" ~ "Public tap/standpipe",
+    drink_water == "i6_drink_water__4" ~ "Piped water to neighbor",
+    drink_water == "i6_drink_water__5" ~ "Dug well - protected",
+    drink_water == "i6_drink_water__6" ~ "Dug well - unprotected",
+    drink_water == "i6_drink_water__7" ~ "Rainwater- own tank - tap inside dwelling",
+    drink_water == "i6_drink_water__8" ~ "Rainwater-own tank - tap outside dwelling",
+    drink_water == "i6_drink_water__9" ~ "Communal tank",
+    drink_water == "i6_drink_water__10" ~ "Communal standpipe",
+    drink_water == "i6_drink_water__11" ~ "Vendor - provided/bottled water"
+    ))
+#create a new sheet:i6_drink_water in census workbook, 
+#and write i6_drink_water table to i6_drink_water sheet
+addWorksheet(census, "i6_drink_water")
+writeData(census, sheet = "i6_drink_water", x = i6_drink_water)
+
+#create cooking_water sheet
+i7_cooking_water <- Pacific_Standard_Census_Question %>%
+  select(interview__id,i7_source_water__1:i7_source_water__11) %>%
+  gather(i7_source_water__1:i7_source_water__11, key = "cooking_water", value = "cooking_water_value") %>%
+  filter(cooking_water_value == 1)%>%
+  mutate(cooking_water = case_when(
+    cooking_water == "i7_source_water__1" ~ "Public piped water inside dwelling",
+    cooking_water == "i7_source_water__2" ~ "Public piped water outside dwelling",
+    cooking_water == "i7_source_water__3" ~ "Public tap/standpipe",
+    cooking_water == "i7_source_water__4" ~ "Piped water to neighbor",
+    cooking_water == "i7_source_water__5" ~ "Dug well - protected",
+    cooking_water == "i7_source_water__6" ~ "Dug well - unprotected",
+    cooking_water == "i7_source_water__7" ~ "Rain water : own tank - tap inside dwelling",
+    cooking_water == "i7_source_water__8" ~ "Rain water : own tank - tap outside dwelling",
+    cooking_water == "i7_source_water__9" ~ "Communal tank",
+    cooking_water == "i7_source_water__10" ~ "Communal standpipe",
+    cooking_water == "i7_source_water__11" ~ "Vendor - provided/bottled water"
+  ))
+#create a new sheet:i7_cooking_water in census workbook, 
+#and write i7_cooking_water table to i7_cooking_water sheet
+addWorksheet(census, "i7_cooking_water")
+writeData(census, sheet = "i7_cooking_water", x = i7_cooking_water)
+
+#create i9_cook_fuel sheet
+i9_cook_fuel <- Pacific_Standard_Census_Question %>%
+  select(interview__id, i9_cook_fuel__1:i9_cook_fuel__6) %>%
+  gather(i9_cook_fuel__1:i9_cook_fuel__6, key = "cook_fuel", value = "cook_fuel_value") %>%
+  filter(cook_fuel_value == 1)%>%
+  mutate(cook_fuel = case_when(
+    cook_fuel == "i9_cook_fuel__1" ~ "Electricity",
+    cook_fuel == "i9_cook_fuel__2" ~ "Propane gas (LPG)",
+    cook_fuel == "i9_cook_fuel__3" ~ "Kerosene",
+    cook_fuel == "i9_cook_fuel__4" ~ "Solar power",
+    cook_fuel == "i9_cook_fuel__5" ~ "Wood stove",
+    cook_fuel == "i9_cook_fuel__6" ~ "Wood, coconut husks/shells open fire"
+  ))
+#create a new sheet:i9_cook_fuel in census workbook, 
+#and write i9_cook_fuel table to i9_cook_fuel sheet
+addWorksheet(census, "i9_cook_fuel")
+writeData(census, sheet = "i9_cook_fuel", x = i9_cook_fuel)
+
+#create i10_electricity sheet
+i10_electricity <- Pacific_Standard_Census_Question %>%
+  select(interview__id, i10_electricity__0:i10_electricity__4) %>%
+  gather(i10_electricity__0:i10_electricity__4, key = "electricity", value = "electricity_value") %>%
+  filter(electricity_value == 1)%>%
+  mutate(electricity = case_when(
+    electricity == "i10_electricity__0" ~ "None",
+    electricity == "i10_electricity__1" ~ "Government electricity",
+    electricity == "i10_electricity__2" ~ "Own generator",
+    electricity == "i10_electricity__3" ~ "Electricity connected from neighbor",
+    electricity == "i10_electricity__4" ~ "Solar"
+  ))
+#create a new sheet:i10_electricity in census workbook, 
+#and write i10_electricity table to i10_electricity sheet
+addWorksheet(census, "i10_electricity")
+writeData(census, sheet = "i10_electricity", x = i10_electricity)
+
+
+#create i11_lighting sheet
+i11_lighting <- Pacific_Standard_Census_Question %>%
+  select(interview__id, i11_lighting__0:i11_lighting__4) %>%
+  gather(i11_lighting__0:i11_lighting__4, key = "lighting", value = "lighting_value") %>%
+  filter(lighting_value == 1)%>%
+  mutate(lighting = case_when(
+    lighting == "i11_lighting__0" ~ "None",
+    lighting == "i11_lighting__1" ~ "Electricity",
+    lighting == "i11_lighting__2" ~ "Pressure Lamp",
+    lighting == "i11_lighting__3" ~ "Kerosene Lamp",
+    lighting == "i11_lighting__4" ~ "Solar"
+  ))
+#create a new sheet:i11_lighting in census workbook, 
+#and write i11_lighting table to i11_lighting sheet
+addWorksheet(census, "i11_lighting")
+writeData(census, sheet = "i11_lighting", x = i11_lighting)
+
+
+#create i12_waste_disp sheet
+i12_waste_disp <- Pacific_Standard_Census_Question %>%
+  select(interview__id, i12_waste_disp__1:i12_waste_disp__6) %>%
+  gather(i12_waste_disp__1:i12_waste_disp__6, key = "waste_disp", value = "waste_disp_value") %>%
+  filter(waste_disp_value == 1)%>%
+  mutate(waste_disp = case_when(
+    waste_disp == "i12_waste_disp__1" ~ "Personal bin (public collection)",
+    waste_disp == "i12_waste_disp__2" ~ "Personal bin (take to dump yourself)",
+    waste_disp == "i12_waste_disp__3" ~ "Burn it",
+    waste_disp == "i12_waste_disp__4" ~ "Compost",
+    waste_disp == "i12_waste_disp__5" ~ "Bury in yard/bush",
+    waste_disp == "i12_waste_disp__6" ~ "Ocean"
+  ))
+#create a new sheet:i12_waste_disp in census workbook, 
+#and write i12_waste_disp table to i12_waste_disp sheet
+addWorksheet(census, "i12_waste_disp")
+writeData(census, sheet = "i12_waste_disp", x = i12_waste_disp)
+
+#create i13_hhld_goods sheet
+i13_hhld_goods <- Pacific_Standard_Census_Question %>%
+  select(interview__id, i13_hhld_goods__1:i13_hhld_goods__21) %>%
+  gather(i13_hhld_goods__1:i13_hhld_goods__21, key = "hhld_goods", value = "hhld_goods_value") %>%
+  filter(hhld_goods_value == 1)%>%
+  mutate(hhld_goods = case_when(
+    hhld_goods == "i13_hhld_goods__1" ~ "Car",
+    hhld_goods == "i13_hhld_goods__2" ~ "Truck",
+    hhld_goods == "i13_hhld_goods__3" ~ "Van",
+    hhld_goods == "i13_hhld_goods__4" ~ "Motor bike",
+    hhld_goods == "i13_hhld_goods__5" ~ "Scooter",
+    hhld_goods == "i13_hhld_goods__6" ~ "Bicycle",
+    hhld_goods == "i13_hhld_goods__7" ~ "Canoe-paddle",
+    hhld_goods == "i13_hhld_goods__8" ~ "Canoe-outrigger",
+    hhld_goods == "i13_hhld_goods__9" ~ "Refrigerator",
+    hhld_goods == "i13_hhld_goods__10" ~ "Freezer",
+    hhld_goods == "i13_hhld_goods__11" ~ "Stove",
+    hhld_goods == "i13_hhld_goods__12" ~ "Washing machine",
+    hhld_goods == "i13_hhld_goods__13" ~ "Sewing machine",
+    hhld_goods == "i13_hhld_goods__14" ~ "Generator",
+    hhld_goods == "i13_hhld_goods__15" ~ "Solar panel/equipment",
+    hhld_goods == "i13_hhld_goods__16" ~ "Television",
+    hhld_goods == "i13_hhld_goods__17" ~ "Cell phone",
+    hhld_goods == "i13_hhld_goods__18" ~ "Landline phone",
+    hhld_goods == "i13_hhld_goods__19" ~ "Desktop computer",
+    hhld_goods == "i13_hhld_goods__20" ~ "Laptop",
+    hhld_goods == "i13_hhld_goods__21" ~ "Tablet"
+  ))
+#create a new sheet:i13_hhld_goods in census workbook, 
+#and write i13_hhld_goods table to i13_hhld_goods sheet
+addWorksheet(census, "i13_hhld_goods")
+writeData(census, sheet = "i13_hhld_goods", x = i13_hhld_goods)
+
+#create i13g_internet sheet
+i13g_internet <- Pacific_Standard_Census_Question %>%
+  mutate(internet = as_factor(i13g_internet)) %>%
+  select(interview__id, internet)
+
+#create a new sheet:i13g_internet in census workbook, 
+#and write i13g_internet table to i13g_internet sheet
+addWorksheet(census, "i13g_internet")
+writeData(census, sheet = "i13g_internet", x = i13g_internet)
+
+#create i15a_hh_income sheet
+i15a_hh_income <- Pacific_Standard_Census_Question %>%
+  select(interview__id, i15a_hh_income__0:i15a_hh_income__7) %>%
+  gather(i15a_hh_income__0:i15a_hh_income__7, key = "hh_income", value = "hh_income_value") %>%
+  filter(hh_income_value == 1)%>%
+  mutate(hh_income = case_when(
+    hh_income == "i15a_hh_income__0" ~ "None",
+    hh_income == "i15a_hh_income__1" ~ "Wages and salary",
+    hh_income == "i15a_hh_income__2" ~ "Income from own business",
+    hh_income == "i15a_hh_income__3" ~ "Sale of products (crops, fish, handicrafts)",
+    hh_income == "i15a_hh_income__4" ~ "Rental income from land lease",
+    hh_income == "i15a_hh_income__5" ~ "Rental income from house/flats rented out",
+    hh_income == "i15a_hh_income__6" ~ "Remittances from anyone not on household roster",
+    hh_income == "i15a_hh_income__7" ~ "Retirement fund, survivor and disability pensions"
+  ))
+#create a new sheet:i15a_hh_income in census workbook, 
+#and write i15a_hh_income table to i15a_hh_income sheet
+addWorksheet(census, "i15a_hh_income")
+writeData(census, sheet = "i15a_hh_income", x = i15a_hh_income)
+
+#create i17a_environ_problem sheet
+i17a_environ_problem <- Pacific_Standard_Census_Question %>%
+  select(interview__id, i17a_environ_problem__1:i17a_environ_problem__6) %>%
+  gather(i17a_environ_problem__1:i17a_environ_problem__6, key = "environ_problem", value = "environ_problem_value") %>%
+  filter(environ_problem_value == 1)%>%
+  mutate(environ_problem = case_when(
+    environ_problem == "i17a_environ_problem__1" ~ "Coastal erosion",
+    environ_problem == "i17a_environ_problem__2" ~ "Land salinization",
+    environ_problem == "i17a_environ_problem__3" ~ "Water pollution",
+    environ_problem == "i17a_environ_problem__4" ~ "Infertile land",
+    environ_problem == "i17a_environ_problem__5" ~ "Pest infestation",
+    environ_problem == "i17a_environ_problem__6" ~ "Deforestation"
+  ))
+#create a new sheet:i17a_environ_problem in census workbook, 
+#and write i17a_environ_problem table to i17a_environ_problem sheet
+addWorksheet(census, "i17a_environ_problem")
+writeData(census, sheet = "i17a_environ_problem", x = i17a_environ_problem)
+
+#create I17d_extreme_whether sheet
+I17d_extreme_whether <- Pacific_Standard_Census_Question %>%
+  select(interview__id, I17d_affected_10yrs__1:I17d_affected_10yrs__6) %>%
+  gather(I17d_affected_10yrs__1:I17d_affected_10yrs__6, key = "extreme_whether", value = "extreme_whether_value") %>%
+  filter(extreme_whether_value == 1)%>%
+  mutate(extreme_whether = case_when(
+    extreme_whether == "I17d_affected_10yrs__1" ~ "Drought/irregular rains",
+    extreme_whether == "I17d_affected_10yrs__2" ~ "Floods",
+    extreme_whether == "I17d_affected_10yrs__3" ~ "Typhoons",
+    extreme_whether == "I17d_affected_10yrs__4" ~ "Storm surges",
+    extreme_whether == "I17d_affected_10yrs__5" ~ "King tide",
+    extreme_whether == "I17d_affected_10yrs__6" ~ "Tsunami"
+  ))
+#create a new sheet:I17d_extreme_whether in census workbook, 
+#and write I17d_extreme_whether table to I17d_extreme_whether sheet
+addWorksheet(census, "I17d_extreme_whether")
+writeData(census, sheet = "I17d_extreme_whether", x = I17d_extreme_whether)
+
+#create j1_agriculture sheet
+j1_agriculture <- Pacific_Standard_Census_Question %>%
+  select(interview__id, j1_agricuture__1:j1_agricuture__8) %>%
+  gather(j1_agricuture__1:j1_agricuture__8, key = "agriculture", value = "agriculture_value") %>%
+  filter(agriculture_value == 1)%>%
+  mutate(agriculture = case_when(
+    agriculture == "j1_agricuture__1" ~ "Growing crops",
+    agriculture == "j1_agricuture__2" ~ "Fishing",
+    agriculture == "j1_agricuture__3" ~ "Raising livestock",
+    agriculture == "j1_agricuture__4" ~ "Freshwater aqualculture",
+    agriculture == "j1_agricuture__5" ~ "Marine aquaculture",
+    agriculture == "j1_agricuture__6" ~ "Collection of forestry products",
+    agriculture == "j1_agricuture__7" ~ "Production of handicrafts",
+    agriculture == "j1_agricuture__8" ~ "Hunting"
+  ))
+#create a new sheet:j1_agriculture in census workbook, 
+#and write j1_agriculture table to j1_agriculture sheet
+addWorksheet(census, "j1_agriculture")
+writeData(census, sheet = "j1_agriculture", x = j1_agriculture)
+
+#create FIES (Food Insecurity Experience Scale) sheet
+FIES <- Pacific_Standard_Census_Question %>%
+  select(interview__id, worried :whlday) %>%
+  gather(worried :whlday, key = "FIES", value = "FIES_value") %>%
+  filter(FIES_value == 1)%>%
+  mutate(FIES = case_when(
+    FIES == "worried" ~ "Worried about no enough food",
+    FIES == "healthy" ~ "Unable to eat nutritious food",
+    FIES == "fewfood" ~ "Eat a few kinds of foods",
+    FIES == "skipped" ~ "Skip a meal",
+    FIES == "ateless" ~ "Eat less than you should",
+    FIES == "runout" ~ "Run out of food",
+    FIES == "hungry" ~ "Hungry but did not eat",
+    FIES == "whlday" ~ "Go without eating for whole day"
+  ))
+
+#create a new sheet:FIES in census workbook, 
+#and write FIES table to FIES sheet
+addWorksheet(census, "FIES")
+writeData(census, sheet = "FIES", x = FIES)
+
+# Export the file
+saveWorkbook(census, "census_data.xlsx", overwrite = TRUE)
+
